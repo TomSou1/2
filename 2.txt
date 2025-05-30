@@ -4,8 +4,6 @@
 #include <fstream>
 #include <windows.h>
 #include <limits>
-#include <cctype>
-#include <algorithm>
 
 using namespace std;
 
