@@ -1,0 +1,582 @@
+#include <iostream>
+#include <string>
+#include <iomanip>
+#include <fstream>
+#include <windows.h>
+#include <limits>
+#include <cctype>
+#include <algorithm>
+#include <memory>
+
+using namespace std;
+
+void setRussianLocale() {
+    SetConsoleCP(1251);
+    SetConsoleOutputCP(1251);
+<<<<<<< HEAD
+} // локаль
+=======
+} // русская локаль
+>>>>>>> new-feature
+
+struct Department {
+    string name;
+    int staffCount;
+    int qualifiedStaff;
+    string director;
+    bool hasProfessors;
+    shared_ptr<Department> next;
+
+    void serialize(ofstream& out) const {
+        size_t nameSize = name.size();
+        out.write(reinterpret_cast<const char*>(&nameSize), sizeof(nameSize));
+        out.write(name.c_str(), nameSize);
+
+        out.write(reinterpret_cast<const char*>(&staffCount), sizeof(staffCount));
+        out.write(reinterpret_cast<const char*>(&qualifiedStaff), sizeof(qualifiedStaff));
+
+        size_t directorSize = director.size();
+        out.write(reinterpret_cast<const char*>(&directorSize), sizeof(directorSize));
+        out.write(director.c_str(), directorSize);
+
+        out.write(reinterpret_cast<const char*>(&hasProfessors), sizeof(hasProfessors));
+    }
+
+    void deserialize(ifstream& in) {
+        size_t nameSize;
+        in.read(reinterpret_cast<char*>(&nameSize), sizeof(nameSize));
+        if (in.fail()) throw runtime_error("Ошибка чтения размера названия");
+        name.resize(nameSize);
+        in.read(&name[0], nameSize);
+        if (in.fail()) throw runtime_error("Ошибка чтения названия");
+
+        in.read(reinterpret_cast<char*>(&staffCount), sizeof(staffCount));
+        if (in.fail()) throw runtime_error("Ошибка чтения количества сотрудников");
+
+        in.read(reinterpret_cast<char*>(&qualifiedStaff), sizeof(qualifiedStaff));
+        if (in.fail()) throw runtime_error("Ошибка чтения количества остепенённых");
+
+        size_t directorSize;
+        in.read(reinterpret_cast<char*>(&directorSize), sizeof(directorSize));
+        if (in.fail()) throw runtime_error("Ошибка чтения размера ФИО заведующего");
+        director.resize(directorSize);
+        in.read(&director[0], directorSize);
+        if (in.fail()) throw runtime_error("Ошибка чтения ФИО заведующего");
+
+        in.read(reinterpret_cast<char*>(&hasProfessors), sizeof(hasProfessors));
+        if (in.fail()) throw runtime_error("Ошибка чтения наличия профессоров");
+    }
+};
+
+// Прототипы функций
+void clearList(shared_ptr<Department>& head);
+int safeInputInt(const string& prompt, int minVal = 0, int maxVal = INT_MAX);
+bool safeInputBool(const string& prompt);
+bool isValidName(const string& name);
+void addToStart(shared_ptr<Department>& head, const string& name, int staff, int qualified,
+    const string& director, bool hasProfessors);
+void addToEnd(shared_ptr<Department>& head, const string& name, int staff, int qualified,
+    const string& director, bool hasProfessors);
+void deleteDepartment(shared_ptr<Department>& head, const string& name);
+void printAll(const shared_ptr<Department>& head);
+void findLeastQualified(const shared_ptr<Department>& head);
+void printDepartmentStats(const shared_ptr<Department>& head, const string& name);
+shared_ptr<Department> createProfessorsList(const shared_ptr<Department>& head);
+void saveToBinaryFile(const shared_ptr<Department>& head, const string& filename);
+shared_ptr<Department> loadFromBinaryFile(const string& filename);
+void displayMainMenu();
+void handleUserInput(shared_ptr<Department>& head, shared_ptr<Department>& professorsList);
+
+// Реализация функций
+
+void clearList(shared_ptr<Department>& head) {
+    while (head) {
+        head = move(head->next);
+    }
+}
+
+int safeInputInt(const string& prompt, int minVal, int maxVal) {
+    int value;
+    while (true) {
+        cout << prompt;
+        if (cin >> value) {
+            if (value >= minVal && value <= maxVal) {
+                cin.ignore(1000, '\n');
+                return value;
+            }
+            cout << "Ошибка: значение должно быть от " << minVal << " до " << maxVal << "!\n";
+        }
+        else {
+            cout << "Ошибка: введите целое число!\n";
+            cin.clear();
+        }
+        cin.ignore(1000, '\n');
+    }
+}
+
+bool safeInputBool(const string& prompt) {
+    string answer;
+    while (true) {
+        cout << prompt << " (1/0): ";
+        getline(cin, answer);
+        answer.erase(remove_if(answer.begin(), answer.end(), ::isspace), answer.end());
+
+        if (answer == "1") return true;
+        if (answer == "0") return false;
+
+        cout << "Ошибка: введите 1 или 0!\n";
+    }
+}
+
+// Улучшенная функция проверки имени
+bool isValidName(const string& name) {
+    if (name.empty()) return false;
+
+    // Проверка первого символа (русские и английские буквы)
+    unsigned char first = static_cast<unsigned char>(name[0]);
+    if (!((first >= 'A' && first <= 'Z') ||
+        (first >= 'a' && first <= 'z') ||
+        (first >= 192 && first <= 255))) { // Диапазон русских букв в Windows-1251
+        return false;
+    }
+
+    // Проверка остальных символов
+    for (char c : name) {
+        unsigned char uc = static_cast<unsigned char>(c);
+        if (!((uc >= 'A' && uc <= 'Z') ||
+            (uc >= 'a' && uc <= 'z') ||
+            (uc >= 192 && uc <= 255) || // Русские буквы
+            uc == ' ' || uc == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void addToStart(shared_ptr<Department>& head, const string& name, int staff, int qualified,
+    const string& director, bool hasProfessors) {
+    auto newDept = make_shared<Department>();
+    newDept->name = name;
+    newDept->staffCount = staff;
+    newDept->qualifiedStaff = qualified;
+    newDept->director = director;
+    newDept->hasProfessors = hasProfessors;
+    newDept->next = head;
+    head = newDept;
+    cout << "Кафедра '" << name << "' успешно добавлена в начало списка.\n";
+}
+
+void addToEnd(shared_ptr<Department>& head, const string& name, int staff, int qualified,
+    const string& director, bool hasProfessors) {
+    if (!head) {
+        addToStart(head, name, staff, qualified, director, hasProfessors);
+        return;
+    }
+
+    shared_ptr<Department> current = head;
+    while (current->next) {
+        current = current->next;
+    }
+    current->next = make_shared<Department>();
+    current->next->name = name;
+    current->next->staffCount = staff;
+    current->next->qualifiedStaff = qualified;
+    current->next->director = director;
+    current->next->hasProfessors = hasProfessors;
+    cout << "Кафедра '" << name << "' успешно добавлена в конец списка.\n";
+}
+
+void deleteDepartment(shared_ptr<Department>& head, const string& name) {
+    if (!head) {
+        cout << "Список кафедр пуст!\n";
+        return;
+    }
+
+    if (head->name == name) {
+        head = move(head->next);
+        cout << "Кафедра '" << name << "' успешно удалена.\n";
+        return;
+    }
+
+    shared_ptr<Department> current = head;
+    while (current->next && current->next->name != name) {
+        current = current->next;
+    }
+
+    if (current->next) {
+        current->next = move(current->next->next);
+        cout << "Кафедра '" << name << "' успешно удалена.\n";
+    }
+    else {
+        cout << "Кафедра с названием '" << name << "' не найдена!\n";
+    }
+}
+
+void printAll(const shared_ptr<Department>& head) {
+    if (!head) {
+        cout << "Список кафедр пуст!\n";
+        return;
+    }
+
+    cout << "=== Список всех кафедр ===\n";
+    shared_ptr<Department> current = head;
+    while (current) {
+        cout << "Кафедра: " << current->name
+            << "\n\tСотрудников: " << current->staffCount
+            << "\n\tОстепенённых: " << current->qualifiedStaff
+            << "\n\tЗаведующий: " << current->director
+            << "\n\tПрофессора: " << (current->hasProfessors ? "Да" : "Нет")
+            << "\n\n";
+        current = current->next;
+    }
+}
+
+void findLeastQualified(const shared_ptr<Department>& head) {
+    if (!head) {
+        cout << "Список пуст!\n";
+        return;
+    }
+
+    shared_ptr<Department> current = head;
+    shared_ptr<Department> minDept = head;
+
+    while (current) {
+        if (current->qualifiedStaff < minDept->qualifiedStaff) {
+            minDept = current;
+        }
+        current = current->next;
+    }
+
+    cout << "Кафедра с наименьшим числом остепенённых:\n"
+        << "Название: " << minDept->name
+        << "\nКоличество остепенённых: " << minDept->qualifiedStaff << endl;
+}
+
+void printDepartmentStats(const shared_ptr<Department>& head, const string& name) {
+    if (!head) {
+        cout << "Список пуст!\n";
+        return;
+    }
+
+    int totalStaff = 0;
+    int totalQualified = 0;
+    shared_ptr<Department> current = head;
+    while (current) {
+        totalStaff += current->staffCount;
+        totalQualified += current->qualifiedStaff;
+        current = current->next;
+    }
+
+    if (totalStaff == 0 || totalQualified == 0) {
+        cout << "Невозможно вычислить статистику: общее количество сотрудников или остепенённых равно нулю!\n";
+        return;
+    }
+
+    current = head;
+    while (current && current->name != name) {
+        current = current->next;
+    }
+
+    if (!current) {
+        cout << "Кафедра '" << name << "' не найдена!\n";
+        return;
+    }
+
+    double staffPercentage = (static_cast<double>(current->staffCount) / totalStaff) * 100;
+    double qualifiedPercentage = (static_cast<double>(current->qualifiedStaff) / totalQualified) * 100;
+
+    cout << "Статистика кафедры '" << name << "':\n"
+        << "Количество сотрудников: " << current->staffCount << " ("
+        << fixed << setprecision(2) << staffPercentage << "% от общего числа)\n"
+        << "Остепенённые: " << current->qualifiedStaff << " ("
+        << fixed << setprecision(2) << qualifiedPercentage << "% от общего числа)\n";
+}
+
+shared_ptr<Department> createProfessorsList(const shared_ptr<Department>& head) {
+    shared_ptr<Department> newHead = nullptr;
+    shared_ptr<Department> current = head;
+    shared_ptr<Department> tail = nullptr;
+
+    while (current) {
+        if (current->hasProfessors) {
+            auto newDept = make_shared<Department>();
+            newDept->name = current->name;
+            newDept->staffCount = current->staffCount;
+            newDept->qualifiedStaff = current->qualifiedStaff;
+            newDept->director = current->director;
+            newDept->hasProfessors = true;
+
+            if (!newHead) {
+                newHead = newDept;
+                tail = newHead;
+            }
+            else {
+                tail->next = newDept;
+                tail = tail->next;
+            }
+        }
+        current = current->next;
+    }
+
+    return newHead;
+}
+
+void saveToBinaryFile(const shared_ptr<Department>& head, const string& filename) {
+    if (!head) {
+        cout << "Нет данных для сохранения!\n";
+        return;
+    }
+
+    ofstream out(filename, ios::binary);
+    if (!out.is_open()) {
+        cerr << "Ошибка открытия файла для записи!\n";
+        return;
+    }
+
+    int count = 0;
+    shared_ptr<Department> current = head;
+    while (current) {
+        count++;
+        current = current->next;
+    }
+    out.write(reinterpret_cast<const char*>(&count), sizeof(count));
+
+    current = head;
+    while (current) {
+        current->serialize(out);
+        if (out.fail()) {
+            cerr << "Ошибка записи в файл!\n";
+            out.close();
+            return;
+        }
+        current = current->next;
+    }
+
+    out.close();
+    if (out.fail()) {
+        cerr << "Ошибка при закрытии файла!\n";
+        return;
+    }
+
+    cout << "Данные успешно сохранены в файл '" << filename << "' (всего " << count << " кафедр)\n";
+}
+
+shared_ptr<Department> loadFromBinaryFile(const string& filename) {
+    ifstream in(filename, ios::binary);
+    if (!in.is_open()) {
+        cerr << "Ошибка открытия файла для чтения или файл не существует!\n";
+        return nullptr;
+    }
+
+    int count;
+    in.read(reinterpret_cast<char*>(&count), sizeof(count));
+    if (in.fail() || count <= 0) {
+        cout << "Файл поврежден или не содержит данных!\n";
+        in.close();
+        return nullptr;
+    }
+
+    shared_ptr<Department> head = nullptr;
+    try {
+        for (int i = 0; i < count; i++) {
+            auto dept = make_shared<Department>();
+            dept->deserialize(in);
+
+            if (dept->name.empty() || dept->director.empty() ||
+                dept->staffCount < 0 || dept->qualifiedStaff < 0) {
+                throw runtime_error("Обнаружены некорректные данные в файле!");
+            }
+
+            addToEnd(head, dept->name, dept->staffCount, dept->qualifiedStaff,
+                dept->director, dept->hasProfessors);
+        }
+    }
+    catch (const exception& e) {
+        cerr << "Ошибка при загрузке данных: " << e.what() << endl;
+        clearList(head);
+        in.close();
+        return nullptr;
+    }
+
+    in.close();
+    if (in.fail()) {
+        cerr << "Ошибка при закрытии файла!\n";
+        clearList(head);
+        return nullptr;
+    }
+
+    cout << "Успешно загружено " << count << " кафедр из файла '" << filename << "'\n";
+    return head;
+}
+
+void displayMainMenu() {
+    cout << "\n=== Меню управления кафедрами ==="
+        << "\n1. Добавить кафедру в начало"
+        << "\n2. Добавить кафедру в конец"
+        << "\n3. Удалить кафедру"
+        << "\n4. Вывести все кафедры"
+        << "\n5. Найти кафедру с минимумом остепенённых"
+        << "\n6. Показать статистику кафедры"
+        << "\n7. Создать список кафедр с профессорами"
+        << "\n8. Вывести список кафедр с профессорами"
+        << "\n9. Сохранить данные в файл"
+        << "\n10. Загрузить данные из файла"
+        << "\n11. Очистить список кафедр"
+        << "\n12. Выход"
+        << "\nВыберите действие: ";
+}
+
+void handleUserInput(shared_ptr<Department>& head, shared_ptr<Department>& professorsList) {
+    const string filename = "departments.dat";
+    string input;
+    int choice;
+
+    do {
+        displayMainMenu();
+
+        while (true) {
+            getline(cin, input);
+            try {
+                choice = stoi(input);
+                if (choice >= 1 && choice <= 12) break;
+                cout << "Введите число от 1 до 12: ";
+            }
+            catch (...) {
+                cout << "Ошибка: введите число от 1 до 12: ";
+            }
+        }
+
+        string name, director;
+        int staff, qualified;
+        bool hasProfessors;
+
+        switch (choice) {
+        case 1: {
+            cout << "Введите название кафедры: ";
+            getline(cin, name);
+
+            staff = safeInputInt("Общее число сотрудников: ", 1);
+            qualified = safeInputInt("Число остепенённых: ", 0, staff);
+
+            do {
+                cout << "ФИО заведующего: ";
+                getline(cin, director);
+                if (!isValidName(director)) {
+                    cout << "Ошибка: ФИО может содержать только буквы, пробелы и дефисы!\n";
+                }
+            } while (!isValidName(director));
+
+            hasProfessors = safeInputBool("Есть профессора");
+            addToStart(head, name, staff, qualified, director, hasProfessors);
+            break;
+        }
+
+        case 2: {
+            cout << "Введите название кафедры: ";
+            getline(cin, name);
+
+            staff = safeInputInt("Общее число сотрудников: ", 1);
+            qualified = safeInputInt("Число остепенённых: ", 0, staff);
+
+            do {
+                cout << "ФИО заведующего: ";
+                getline(cin, director);
+                if (!isValidName(director)) {
+                    cout << "Ошибка: ФИО может содержать только буквы, пробелы и дефисы!\n";
+                }
+            } while (!isValidName(director));
+
+            hasProfessors = safeInputBool("Есть профессора");
+            addToEnd(head, name, staff, qualified, director, hasProfessors);
+            break;
+        }
+
+        case 3:
+            if (!head) {
+                cout << "Список кафедр пуст!\n";
+                break;
+            }
+            cout << "Введите название кафедры для удаления: ";
+            getline(cin, name);
+            deleteDepartment(head, name);
+            break;
+
+        case 4:
+            printAll(head);
+            break;
+
+        case 5:
+            findLeastQualified(head);
+            break;
+
+        case 6:
+            if (!head) {
+                cout << "Список кафедр пуст!\n";
+                break;
+            }
+            cout << "Введите название кафедры: ";
+            getline(cin, name);
+            printDepartmentStats(head, name);
+            break;
+
+        case 7:
+            professorsList = createProfessorsList(head);
+            if (professorsList) {
+                cout << "Список кафедр с профессорами успешно создан!\n";
+            }
+            else {
+                cout << "В основном списке нет кафедр с профессорами!\n";
+            }
+            break;
+
+        case 8:
+            if (!professorsList) {
+                cout << "Список кафедр с профессорами пуст или не создан!\n";
+                break;
+            }
+            cout << "=== Кафедры с профессорами ===\n";
+            printAll(professorsList);
+            break;
+
+        case 9:
+            saveToBinaryFile(head, filename);
+            break;
+
+        case 10: {
+            auto newData = loadFromBinaryFile(filename);
+            if (newData) {
+                head = newData;
+            }
+            break;
+        }
+
+        case 11:
+            clearList(head);
+            clearList(professorsList);
+            cout << "Списки кафедр очищены.\n";
+            break;
+
+        case 12:
+            cout << "Завершение работы...\n";
+            break;
+        }
+    } while (choice != 12);
+}
+
+int main() {
+    setRussianLocale();
+    shared_ptr<Department> head = nullptr;
+    shared_ptr<Department> professorsList = nullptr;
+
+    try {
+        handleUserInput(head, professorsList);
+    }
+    catch (const exception& e) {
+        cerr << "Произошла критическая ошибка: " << e.what() << endl;
+    }
+
+    clearList(head);
+    clearList(professorsList);
+
+    return 0;
+}
